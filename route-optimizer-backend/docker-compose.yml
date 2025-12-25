@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: route_optimizer_db
+    environment:
+      POSTGRES_USER: route_user
+      POSTGRES_PASSWORD: route_pass
+      POSTGRES_DB: route_optimizer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U route_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  cache:
+    image: redis:7-alpine
+    container_name: route_optimizer_cache
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Application
+  api:
+    build: .
+    container_name: route_optimizer_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://route_user:route_pass@db:5432/route_optimizer
+      REDIS_URL: redis://cache:6379/0
+      DEBUG: 'True'
+      ENVIRONMENT: development
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
